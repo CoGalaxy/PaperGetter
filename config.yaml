@@ -1,0 +1,39 @@
+# 模型配置 - 通过 AIHubMix / One-API 统一网关接入
+llm:
+  api_base: "https://api.deepseek.com"  # 优先读环境变量
+  api_key: "sk-your-api-key-here"
+ 
+  # 各阶段的模型指派
+  models:
+    extraction: "deepseek-v4-pro"       # DeepSeek-R1: 深度推理，提取观点
+    code_generation: "deepseek-v4-flash"      # DeepSeek-V3: 代码生成
+    parsing: "deepseek-v4-flash"              # 长文本结构化
+    comparison: "deepseek-v4-flash"           # 结果对比（便宜模型即可）
+    limitation: "deepseek-v4-pro"       # 局限性分析，需要强推理
+
+  defaults:
+    temperature: 0.1
+    max_tokens: 4096
+    timeout: 120
+
+# PDF 解析配置
+parser:
+  engine: "pymupdf"           # pymupdf | marker
+  extract_figures: false       # 暂不提取图片（需要额外模型）
+  extract_tables: true
+  chunk_size: 4000            # 每个 chunk 的 token 估算上限
+
+# 沙箱配置
+sandbox:
+  engine: "docker"            # docker | subprocess | e2b
+  image: "python:3.11-slim"
+  timeout: 60                 # 代码执行超时秒数
+  memory_limit: "512m"
+  network: "none"             # 禁止网络访问（安全）
+
+# 搜索配置
+search:
+  sematic_scholar_api_key: ""
+
+# 日志
+log_level: "INFO"

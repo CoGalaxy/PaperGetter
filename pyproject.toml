@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-get-agent"
+version = "0.1.0"
+description = "论文快速理解与验证智能体"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0.0",
+    "instructor>=1.0.0",
+    "pymupdf>=1.24.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

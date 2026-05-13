@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conda run *)",
+      "Bash(C:/Users/22708/.conda/envs/vllm/python.exe -c ' *)",
+      "Bash(C:/Users/22708/.conda/envs/vllm/python.exe test_models.py --help)",
+      "Bash(C:/Users/22708/.conda/envs/vllm/python.exe test_json_parse.py)"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+# LLM Client
+openai>=1.0.0
+instructor>=1.0.0
+
+# PDF Parsing
+pymupdf>=1.24.0
+marker-pdf>=1.0.0
+
+# Orchestration
+langgraph>=0.2.0
+
+# Data
+pydantic>=2.0.0
+pyyaml>=6.0
+
+# Vector Search (Phase 2)
+# chromadb>=0.5.0
+
+# Sandbox
+docker>=7.0.0
+
+# CLI
+click>=8.0.0
+rich>=13.0.0
+
+# Dev
+pytest>=8.0.0
