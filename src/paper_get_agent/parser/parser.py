@@ -79,14 +79,21 @@ class PaperParser:
 
         # 用正则提取 arxiv ID
         arxiv_id: str | None = None
+        year: int | None = None
         m = re.search(r"arXiv[:\s]*(\d{4}\.\d{4,5})", raw_text[:3000], re.IGNORECASE)
         if m:
             arxiv_id = m.group(1)
+            try:
+                yy = int(arxiv_id[:2])
+                year = 2000 + yy if yy < 91 else 1900 + yy
+            except (ValueError, IndexError):
+                pass
 
         return PaperMeta(
             title=title[:300],
             authors=[],
             arxiv_id=arxiv_id,
+            year=year,
             source_path=str(file_path),
             abstract=self._extract_abstract(raw_text),
         )

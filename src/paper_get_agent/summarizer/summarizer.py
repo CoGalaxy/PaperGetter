@@ -43,6 +43,10 @@ SUMMARIZE_PROMPT = """你是一位资深论文审稿人，请根据以下析出�
 
 ---
 
+{year_note}
+
+---
+
 ## 输入数据
 
 方法论（共 {n_methods} 个）:
@@ -67,13 +71,19 @@ class PaperSummarizer:
         claims: list[Claim],
         methodologies: list[Methodology],
         limitations: list[Limitation],
+        paper_year: int | None = None,
     ) -> tuple[dict[str, str], str]:
         """生成每条 claim 的摘要 + 整篇论文的总结.
 
         Returns:
             (claim_id → summary, overall_summary)
         """
+        if paper_year:
+            year_note = f"注意: 这篇论文发表于 {paper_year} 年。请结合其发表年代的历史语境进行评价——不应以当下的标准苛求当时的工作，但可以客观指出其时代局限性。"
+        else:
+            year_note = ""
         prompt = SUMMARIZE_PROMPT.format(
+            year_note=year_note,
             n_methods=len(methodologies),
             methods=self._format_methods(methodologies),
             n_claims=len(claims),

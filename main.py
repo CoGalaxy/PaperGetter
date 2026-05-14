@@ -248,7 +248,7 @@ def main(paper_path: str, output: str, skip_validate: bool, config: str) -> None
     md_path = Path(output) / f"{json_path.stem}.md"
 
     # ── 终端摘要 ──
-    console.print(f"\n[bold]分析完成[/] — 评分: [bold]{report.overall_score}/10[/]")
+    console.print(f"\n[bold]分析完成[/]")
     console.print(f"  提取方法论: {len(report.methodologies)} 个")
     console.print(f"  提取观点: {len(report.claims)} 条")
     console.print(f"  验证结果: {len(report.validations)} 条")

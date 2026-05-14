@@ -1,5 +1,20 @@
-./.claude/
-./.pytest_cache/
-./output/
-./papers/
-.
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 测试 & 工具缓存
+.pytest_cache/
+
+# Claude Code 本地配置
+.claude/
+
+# 项目输出（生成的报告）
+output/
+
+# 待分析 PDF（测试用）
+papers/
+
+# IDE
+.vscode/
+.idea/

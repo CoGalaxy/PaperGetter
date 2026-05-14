@@ -105,7 +105,7 @@ class PaperAgent:
         # 生成报告
         progress("report", "start", "渲染 Markdown + JSON...", _elapsed())
         report = self._build_report(state)
-        progress("report", "done", f"评分 {report.overall_score}/10 | {len(report.methodologies)} 方法 {len(report.claims)} 观点 {len(report.limitations)} 局限", _elapsed())
+        progress("report", "done", f"{len(report.methodologies)} 方法 {len(report.claims)} 观点 {len(report.limitations)} 局限", _elapsed())
 
         return report
 
@@ -205,10 +205,12 @@ class PaperAgent:
         try:
             n_claims = len(state.claims)
             progress("summarize", "step", f"总结 {n_claims} 条主张 + 整篇论文...", elapsed())
+            paper_year = state.paper.meta.year if state.paper else None
             summary_map, overall = self.summarizer.summarize(
                 claims=state.claims,
                 methodologies=state.methodologies,
                 limitations=state.limitations,
+                paper_year=paper_year,
             )
             # 将 per-claim 摘要写入 Claim 对象
             for claim in state.claims:
@@ -232,21 +234,6 @@ class PaperAgent:
         if state.paper is None:
             raise RuntimeError("无法生成报告: 论文解析失败")
 
-        # 综合评分: 基准 6.0 + 方法论加分 + 验证加分 - 局限性扣分
-        score = 6.0
-        if state.methodologies:
-            score += min(1.5, len(state.methodologies) * 0.5)
-        if state.validations:
-            supported = sum(1 for v in state.validations if v.verdict.value == "supported")
-            not_supported = sum(1 for v in state.validations if v.verdict.value == "not_supported")
-            score += (supported - not_supported) * 0.5
-        for lim in state.limitations:
-            if lim.severity == "critical":
-                score -= 0.5
-            elif lim.severity == "high":
-                score -= 0.3
-        score = max(1.0, min(10.0, score))
-
         overall = getattr(state, "_summary_overall", "")
         if not overall:
             parts = [f"提取 {len(state.methodologies)} 个方法"]
@@ -265,7 +252,7 @@ class PaperAgent:
             experiments=state.experiments,
             validations=state.validations,
             limitations=state.limitations,
-            overall_score=round(score, 1),
+            overall_score=0,
             summary=overall,
         )
 
@@ -292,10 +279,11 @@ def report_to_markdown(report: AnalysisReport) -> str:
 
     p = report.paper
     lines.append(f"# 论文分析报告: {p.title}")
-    lines.append(f"\n- **评分**: {report.overall_score}/10")
-    lines.append(f"- **分析时间**: {report.analyzed_at}")
+    lines.append(f"\n- **分析时间**: {report.analyzed_at}")
     if p.arxiv_id:
         lines.append(f"- **arXiv**: [{p.arxiv_id}](https://arxiv.org/abs/{p.arxiv_id})")
+    if p.year:
+        lines.append(f"- **发表年份**: {p.year}")
     if p.doi:
         lines.append(f"- **DOI**: [{p.doi}](https://doi.org/{p.doi})")
 

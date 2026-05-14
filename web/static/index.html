@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="app" x-init="init()" :class="dark ? 'dark' : ''">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paper Get Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] },
+            options: { ignoreHtmlClass: 'no-mathjax' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50:'#eff6ff', 100:'#dbeafe', 500:'#3b82f6', 600:'#2563eb', 700:'#1d4ed8' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { --bg: #ffffff; --fg: #111827; }
+        .dark { --bg: #0f172a; --fg: #f1f5f9; }
+        body { background: var(--bg); color: var(--fg); }
+        .card {
+            background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px;
+            transition: box-shadow 0.2s;
+        }
+        .dark .card { background: #1e293b; border-color: #334155; }
+        .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+        .dark .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .tag {
+            display: inline-flex; align-items: center; padding: 2px 10px;
+            border-radius: 999px; font-size: 12px; font-weight: 500;
+            background: #f1f5f9; color: #475569;
+        }
+        .dark .tag { background: #334155; color: #cbd5e1; }
+        .tag-blue { background: #dbeafe; color: #1d4ed8; }
+        .dark .tag-blue { background: #1e3a5f; color: #93c5fd; }
+        .tag-purple { background: #f3e8ff; color: #7c3aed; }
+        .dark .tag-purple { background: #3b1f6e; color: #c4b5fd; }
+        .tag-link { background: #f0fdf4; color: #166534; text-decoration: none; cursor: pointer; }
+        .dark .tag-link { background: #14532d; color: #86efac; }
+        .tag-link:hover { text-decoration: underline; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; border: none;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+        .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+        .dark .btn-secondary { background: #334155; color: #cbd5e1; border-color: #475569; }
+        .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+        .dark .btn-secondary:hover:not(:disabled) { background: #475569; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #dc2626; }
+        .input {
+            width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid #d1d5db;
+            font-size: 14px; background: white; color: #111827;
+            transition: border-color 0.2s;
+        }
+        .dark .input { background: #1e293b; border-color: #475569; color: #f1f5f9; }
+        .input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        select.input { appearance: none; padding-right: 32px; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 16px; }
+        .prose { max-width: none; }
+        .toast {
+            position: fixed; top: 16px; right: 16px; z-index: 9999; padding: 12px 24px;
+            border-radius: 8px; font-size: 14px; font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .progress-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; }
+        .dark .progress-bar { background: #334155; }
+        .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #8b5cf6); transition: width 0.4s ease; }
+        /* Print styles for colored PDF export */
+        @media print {
+            header, .btn, .progress-bar, nav, button, .no-print { display: none !important; }
+            body { background: white !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+            .dark .card, .dark body { background: white !important; color: #111 !important; }
+            .dark .card { border-color: #ddd !important; background: white !important; }
+            .dark .text-gray-300, .dark .text-gray-400, .dark .text-gray-500, .dark .text-gray-600 { color: #374151 !important; }
+            .dark .text-gray-700 { color: #1f2937 !important; }
+            .dark .text-gray-800, .dark .text-gray-900, .dark .text-gray-200, .dark .text-white { color: #111 !important; }
+            .dark .bg-gray-50, .dark .bg-gray-800 { background: #f9fafb !important; }
+            .dark .bg-gray-900 { background: #f3f4f6 !important; }
+            .dark .border-gray-700, .dark .border-gray-600 { border-color: #e5e7eb !important; }
+            .tag, .dark .tag { color: #374151 !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; }
+            .tag-blue, .dark .tag-blue { color: #1e40af !important; background: #dbeafe !important; }
+            .tag-purple, .dark .tag-purple { color: #6b21a8 !important; background: #f3e8ff !important; }
+            .text-green-600, .dark .text-green-600 { color: #16a34a !important; }
+            .text-yellow-600, .dark .text-yellow-600 { color: #ca8a04 !important; }
+            .text-red-600, .dark .text-red-600 { color: #dc2626 !important; }
+            pre, .dark pre { background: #f3f4f6 !important; color: #1f2937 !important; }
+            main { max-width: 100% !important; padding: 0 !important; }
+            h1 { font-size: 20pt !important; }
+            h2 { font-size: 14pt !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50 dark:bg-slate-900">
+
+<!-- Toast -->
+<div x-show="toast.show" x-transition
+     :class="toast.type === 'error' ? 'bg-red-500' : toast.type === 'info' ? 'bg-yellow-500' : 'bg-green-500'"
+     class="toast text-white" x-text="toast.message"></div>
+
+<!-- Header -->
+<header class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-lg font-bold text-gray-900 dark:text-white">📄 Paper Get Agent</span>
+        </div>
+        <nav class="flex items-center gap-1">
+            <button @click="navigate('home')"
+                    :class="page==='home' ? 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">主页</button>
+            <button @click="navigate('settings')"
+                    :class="page==='settings' ? 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">设置</button>
+            <button @click="toggleTheme()" class="ml-2 p-2 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <span x-show="!dark">🌙</span><span x-show="dark">☀️</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- ═══════════ PAGE: HOME ═══════════ -->
+    <div x-show="page === 'home'">
+
+        <!-- Upload Zone -->
+        <div class="card mb-6"
+             @dragover.prevent="upload.dragging = true"
+             @dragleave.prevent="upload.dragging = false"
+             @drop.prevent="upload.handleDrop($event)"
+             :class="upload.dragging ? 'ring-2 ring-blue-400 border-blue-400' : ''">
+            <div x-show="!upload.file">
+                <div class="text-center py-8 cursor-pointer" @click="$refs.fileInput.click()">
+                    <div class="text-4xl mb-3">📤</div>
+                    <p class="text-gray-600 dark:text-gray-400 font-medium">拖拽 PDF 到此处，或点击选择文件</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">仅支持 .pdf 文件</p>
+                </div>
+                <input type="file" accept=".pdf" class="hidden" x-ref="fileInput"
+                       @change="upload.handleFileInput($event)">
+            </div>
+            <div x-show="upload.file" class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">📄</span>
+                    <div>
+                        <p class="font-medium text-gray-800 dark:text-gray-200" x-text="upload.file.name"></p>
+                        <p class="text-xs text-gray-400" x-text="upload.formatSize(upload.file.size)"></p>
+                    </div>
+                </div>
+                <!-- Validation toggle -->
+                <div class="mt-3 flex items-center gap-2" x-show="upload.file">
+                    <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-500 dark:text-gray-400">
+                        <input type="checkbox" x-model="validateEnabled" @change="if(validateEnabled) showToast('⚠ 代码验证目前功能不全，可能输出不稳定或失败', 'info')">
+                        <span>启用代码验证</span>
+                        <span class="tag tag-purple text-xs">实验性</span>
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="upload.removeFile()" class="btn btn-secondary text-sm py-1 px-3">移除</button>
+                    <button @click="startAnalysis()" class="btn btn-primary text-sm py-1 px-4"
+                            :disabled="upload.uploading">
+                        <span x-show="!upload.uploading">开始分析</span>
+                        <span x-show="upload.uploading" class="flex items-center gap-1">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            上传中...
+                        </span>
+                    </button>
+                </div>
+            </div>
+            <p x-show="upload.error" class="text-red-500 text-sm mt-2" x-text="upload.error"></p>
+        </div>
+
+        <!-- Progress Panel -->
+        <div x-show="jobId" class="card mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-gray-800 dark:text-gray-200">分析进度</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-500" x-text="progress.formatTime(progress.elapsed)"></span>
+                    <button x-show="progress.percentage < 100 && progress.percentage > 0"
+                            @click="cancelCurrentJob()" class="btn btn-danger text-xs py-1 px-3">取消</button>
+                </div>
+            </div>
+            <!-- Progress bar -->
+            <div class="progress-bar mb-4">
+                <div class="progress-fill" :style="'width:' + progress.percentage + '%'"></div>
+            </div>
+            <p class="text-xs text-gray-400 mb-3" x-text="progress.percentage + '%'"></p>
+
+            <!-- Phases -->
+            <div class="space-y-2">
+                <template x-for="ph in progress.phases" :key="ph.key">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span :class="progress.phaseIconClass(ph)" class="text-sm w-4 text-center"
+                                  x-text="ph.status==='passed'?'✓':ph.status==='running'?'◉':ph.status==='error'?'✗':ph.status==='skipped'?'—':'○'"></span>
+                            <span class="text-sm font-medium"
+                                  :class="ph.status==='running'?'text-blue-600 dark:text-blue-400':ph.status==='passed'?'text-green-600 dark:text-green-400':ph.status==='error'?'text-red-500':'text-gray-400'"
+                                  x-text="ph.label"></span>
+                            <span class="text-xs text-gray-400 truncate" x-text="ph.detail"></span>
+                        </div>
+                        <!-- Sub-steps -->
+                        <div x-show="ph.subs.length" class="ml-6 mt-1 space-y-0.5">
+                            <template x-for="sub in ph.subs.slice(0, 5)" :key="sub">
+                                <p class="text-xs text-gray-400 dark:text-gray-500 truncate" x-text="'· ' + sub"></p>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- LLM Output stream -->
+            <div x-show="progress.llmVisible" class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <p class="text-xs font-medium text-gray-500 mb-1">LLM 实时输出</p>
+                <div class="bg-gray-900 rounded-lg p-3 max-h-40 overflow-y-auto">
+                    <pre class="text-xs text-green-400 font-mono whitespace-pre-wrap" x-text="progress.llmOutput.slice(-2000)"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job History -->
+        <div x-show="jobHistory.length" class="card">
+            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3">近期任务</h3>
+            <div class="space-y-2">
+                <template x-for="job in jobHistory.slice(0, 10)" :key="job.id">
+                    <div class="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-700 last:border-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-sm truncate" x-text="job.filename"></span>
+                            <span class="tag text-xs"
+                                  :class="job.status==='done'?'tag-blue':job.status==='error'?'bg-red-100 text-red-700':job.status==='running'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-500'"
+                                  x-text="job.status==='done'?'完成':job.status==='error'?'错误':job.status==='running'?'运行中':job.status"></span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <span x-text="job.created_at ? new Date(job.created_at).toLocaleString('zh-CN') : ''"></span>
+                            <button x-show="job.status==='done'" @click="navigate('results/'+job.id)" class="text-blue-500 hover:text-blue-700 font-medium">查看</button>
+                            <button x-show="job.status==='done'" @click="downloadMarkdown(job.id)" class="text-gray-400 hover:text-gray-600">⬇</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ PAGE: RESULTS ═══════════ -->
+    <div x-show="page === 'results'">
+        <div class="flex items-center gap-3 mb-4 no-print">
+            <button @click="navigate('home')" class="btn btn-secondary text-sm py-1 px-3">← 返回</button>
+            <button @click="downloadMarkdown(jobId)" class="btn btn-primary text-sm py-1 px-4">⬇ 下载 Markdown</button>
+            <button @click="window.print()" class="btn btn-secondary text-sm py-1 px-4">🖨 打印 PDF</button>
+        </div>
+        <div x-show="loadingReport" class="text-center py-20 text-gray-400">
+            <svg class="animate-spin h-8 w-8 mx-auto mb-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            加载报告中...
+        </div>
+        <div x-show="!loadingReport" x-html="reportHTML"></div>
+    </div>
+
+    <!-- ═══════════ PAGE: SETTINGS ═══════════ -->
+    <div x-show="page === 'settings'" x-data="settings">
+        <div x-show="loading" class="text-center py-20 text-gray-400">加载配置中...</div>
+        <div x-show="!loading && config">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6">设置</h2>
+
+            <!-- LLM Section -->
+            <div class="card mb-6">
+                <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-4">🤖 LLM 配置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">API 端点</label>
+                        <input type="text" class="input" x-model="config.llm.api_base">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">API Key</label>
+                        <input type="password" class="input" x-model="config.llm.api_key" placeholder="sk-...">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Temperature</label>
+                        <input type="range" min="0" max="2" step="0.05" class="w-full" x-model.number="config.llm.defaults.temperature">
+                        <span class="text-xs text-gray-400" x-text="config.llm.defaults.temperature"></span>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Max Tokens</label>
+                        <input type="number" class="input" x-model.number="config.llm.defaults.max_tokens">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Timeout (秒)</label>
+                        <input type="number" class="input" x-model.number="config.llm.defaults.timeout">
+                    </div>
+                </div>
+
+                <!-- Model assignments -->
+                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Agent 模型指派</h4>
+                <div class="space-y-3">
+                    <template x-for="role in modelRoles" :key="role.key">
+                        <div class="flex items-center gap-3">
+                            <div class="w-48 flex-shrink-0">
+                                <p class="text-sm font-medium text-gray-700 dark:text-gray-300" x-text="role.label"></p>
+                                <p class="text-xs text-gray-400" x-text="role.desc"></p>
+                            </div>
+                            <select class="input flex-1" x-model="config.llm.models[role.key]">
+                                <option x-text="config.llm.models[role.key]" :value="config.llm.models[role.key]"></option>
+                                <template x-for="m in models" :key="m">
+                                    <option x-show="m !== config.llm.models[role.key]" :value="m" x-text="m"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Parser Section -->
+            <div class="card mb-6">
+                <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-4">📖 Parser 配置</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">引擎</label>
+                        <select class="input" x-model="config.parser.engine">
+                            <option value="pymupdf">PyMuPDF</option>
+                            <option value="marker">Marker</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Chunk Size</label>
+                        <input type="number" class="input" x-model.number="config.parser.chunk_size">
+                    </div>
+                    <div class="flex items-end gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" x-model="config.parser.extract_tables"> <span class="text-sm">提取表格</span>
+                        </label>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" x-model="config.parser.extract_figures"> <span class="text-sm">提取图表</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sandbox Section -->
+            <div class="card mb-6">
+                <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-4">📦 Sandbox 配置</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">引擎</label>
+                        <select class="input" x-model="config.sandbox.engine">
+                            <option value="docker">Docker</option>
+                            <option value="subprocess">Subprocess</option>
+                            <option value="e2b">E2B</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">镜像</label>
+                        <input type="text" class="input" x-model="config.sandbox.image">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">超时 (秒)</label>
+                        <input type="number" class="input" x-model.number="config.sandbox.timeout">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">内存限制</label>
+                        <input type="text" class="input" x-model="config.sandbox.memory_limit">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-3">
+                <button @click="save()" class="btn btn-primary" :disabled="saving">
+                    <span x-show="!saving">💾 保存配置</span>
+                    <span x-show="saving">保存中...</span>
+                </button>
+                <button @click="load()" class="btn btn-secondary">↻ 重置</button>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<!-- ═══ All JS inline (loaded before Alpine to avoid module ordering issues) ═══ -->
+<script>
+// ── SSE Client ──
+class SSEClient {
+    constructor(url, handlers) {
+        this.url = url; this.handlers = handlers; this.es = null;
+        this.reconnectDelay = 1000; this.maxReconnectDelay = 10000; this._closed = false;
+    }
+    connect() {
+        this._closed = false; this._connect();
+    }
+    _connect() {
+        if (this._closed) return;
+        this.es = new EventSource(this.url);
+        this.es.addEventListener('progress', e => { try { this.handlers.progress?.(JSON.parse(e.data)); } catch(_){} });
+        this.es.addEventListener('llm_chunk', e => { try { this.handlers.llm_chunk?.(JSON.parse(e.data)); } catch(_){} });
+        this.es.addEventListener('job_done', e => { try { this.handlers.job_done?.(JSON.parse(e.data)); } catch(_){} this.close(); });
+        this.es.addEventListener('job_error', e => { try { this.handlers.job_error?.(JSON.parse(e.data)); } catch(_){} this.close(); });
+        this.es.addEventListener('ping', () => {});
+        this.es.onerror = () => { this.es?.close(); if (!this._closed) { setTimeout(() => this._connect(), this.reconnectDelay); this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay); } };
+    }
+    close() { this._closed = true; this.es?.close(); this.es = null; }
+}
+
+// ── API helpers ──
+const API = {
+    async _fetch(url, opts) {
+        const res = await fetch(url, opts);
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+    },
+    jobs(file) {
+        const fd = new FormData(); fd.append('file', file);
+        return fetch('/api/jobs', { method: 'POST', body: fd }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t) }));
+    },
+    listJobs() { return fetch('/api/jobs').then(r => r.json()); },
+    cancelJob(id) { return fetch('/api/jobs/' + id + '/cancel', { method: 'POST' }).then(r => r.json()); },
+    getStreamUrl(id) { return '/api/jobs/' + id + '/stream'; },
+    getReport(id) { return fetch('/api/reports/' + id + '/json').then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t) })); },
+    getReportMDUrl(id) { return '/api/reports/' + id + '/markdown'; },
+    getConfig() { return fetch('/api/config').then(r => r.json()); },
+    updateConfig(data) { return fetch('/api/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t) })); },
+    getModels() { return fetch('/api/models').then(r => r.json()); },
+};
+
+// ── Constants ──
+const PHASE_LABELS = { parse:'解析 PDF', extract:'提取方法论与观点', validate:'验证观点', analyze:'局限性分析', summarize:'生成总结', report:'导出报告' };
+const PHASE_ORDER = ['parse','extract','validate','analyze','summarize','report'];
+const CLAIM_TYPE_ZH = { theoretical:'理论', empirical:'实验', comparative:'对比', design:'设计' };
+const LIM_CAT_ZH = { method:'方法', experiment:'实验', theory:'理论', reproducibility:'可复现性', generalization:'泛化性', ethics:'伦理' };
+const SEVERITY_ZH = { critical:'严重', high:'较高', medium:'中等', low:'较低' };
+const VERDICT_ZH = { supported:'支持', partially_supported:'部分支持', not_supported:'不支持', unverifiable:'无法验证', error:'出错' };
+const VERDICT_COLOR = { supported:'bg-green-100 text-green-800', partially_supported:'bg-yellow-100 text-yellow-800', not_supported:'bg-red-100 text-red-800', unverifiable:'bg-gray-100 text-gray-600', error:'bg-red-200 text-red-900' };
+const SEV_COLOR = { critical:'bg-red-100 text-red-800', high:'bg-orange-100 text-orange-800', medium:'bg-yellow-100 text-yellow-800', low:'bg-gray-100 text-gray-600' };
+
+function esc(str) { return str ? String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+
+function renderReport(report) {
+    if (!report) return '<div class="text-center py-20 text-gray-500">无报告数据</div>';
+    const p = report.paper || {};
+    let h = '';
+    // Header
+    h += `<div class="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-3">${esc(p.title||'未命名论文')}</h1>
+        <div class="flex flex-wrap gap-2 mb-2 text-sm text-gray-500 dark:text-gray-400">
+            ${p.year?`<span class="tag">${p.year}</span>`:''}
+            ${p.arxiv_id?`<a href="https://arxiv.org/abs/${p.arxiv_id}" target="_blank" class="tag tag-link">arXiv:${p.arxiv_id}</a>`:''}
+            ${p.doi?`<a href="https://doi.org/${p.doi}" target="_blank" class="tag tag-link">DOI:${p.doi}</a>`:''}
+        </div>
+        <div class="text-xs text-gray-400">分析时间: ${report.analyzed_at ? new Date(report.analyzed_at).toLocaleString('zh-CN') : '-'}</div>
+    </div>`;
+    // Abstract
+    if (p.abstract) h += sec('摘要',`<p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm">${esc(p.abstract)}</p>`);
+    // Methods
+    if (report.methodologies?.length) {
+        let mh = report.methodologies.map((m,i) => {
+            let b = '';
+            if (m.overview) b += `<p class="text-gray-600 dark:text-gray-400 mb-3">${esc(m.overview)}</p>`;
+            if (m.innovations?.length) { b += '<div class="mb-3"><span class="font-medium text-sm text-gray-700 dark:text-gray-300">创新点</span><ul class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-0.5">'; m.innovations.forEach(x=>b+=`<li>${esc(x)}</li>`); b+='</ul></div>'; }
+            if (m.procedure?.length) { b+=`<details class="mb-3"><summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">步骤 (${m.procedure.length} 步)</summary><ol class="list-decimal list-inside text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-0.5">`; m.procedure.forEach(s=>b+=`<li>${esc(s)}</li>`); b+='</ol></details>'; }
+            if (m.key_formulas?.length) { b+='<div class="mb-3"><span class="font-medium text-sm text-gray-700 dark:text-gray-300">关键公式</span>'; m.key_formulas.forEach(f=>{ const clean=String(f).replace(/^\$+/,'').replace(/\$+$/,''); b+=`<div class="bg-gray-50 dark:bg-gray-800 rounded p-3 mt-1 text-center overflow-x-auto">$$${clean}$$</div>`; }); b+='</div>'; }
+            if (m.inputs) b+=`<div class="text-sm text-gray-500 dark:text-gray-400 mb-1"><span class="font-medium">输入:</span> ${esc(m.inputs)}</div>`;
+            if (m.outputs) b+=`<div class="text-sm text-gray-500 dark:text-gray-400 mb-2"><span class="font-medium">输出:</span> ${esc(m.outputs)}</div>`;
+            return `<div class="card mb-3" x-data="{o:false}"><div class="flex items-center justify-between cursor-pointer" @click="o=!o"><div class="flex items-center gap-2"><span class="text-xs text-blue-500 font-mono">${esc(m.id)}</span><span class="font-semibold text-gray-800 dark:text-gray-200">${esc(m.name)}</span>${m.category?`<span class="tag tag-blue">${esc(m.category)}</span>`:''}</div><span class="text-gray-400 text-sm" x-text="o?'▾':'▸'"></span></div><div x-show="o" class="mt-3">${b}</div></div>`;
+        }).join('');
+        h += sec('方法论', mh);
+    }
+    // Claims
+    if (report.claims?.length) {
+        let ch = report.claims.map((c,i) => {
+            let f = '';
+            ['问题','方法','机制','结果','前提'].forEach((lb,k) => { const v = [c.problem,c.method_applied,c.mechanism,c.result,c.condition][k]; if(v) f+=`<div class="mb-1.5"><span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">${lb}</span><p class="text-sm text-gray-700 dark:text-gray-300 mt-0.5">${esc(v)}</p></div>`; });
+            if (c.assumptions?.length) f+=`<div class="mb-1.5"><span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">隐含假设</span><p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">${c.assumptions.map(a=>esc(a)).join('; ')}</p></div>`;
+            if (c.context) f+=`<blockquote class="border-l-2 border-gray-300 dark:border-gray-600 pl-3 my-2 text-xs text-gray-400 dark:text-gray-500 italic">${esc(c.context.slice(0,200))}</blockquote>`;
+            const cp = Math.round((c.confidence||0)*100);
+            return `<div class="card mb-3" x-data="{o:${i===0}}"><div class="flex items-center justify-between cursor-pointer" @click="o=!o"><div class="flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="text-xs text-blue-500 font-mono">${esc(c.id)}</span><span class="tag tag-purple">${CLAIM_TYPE_ZH[c.type]||c.type}</span>${c.related_method_ids?.length?c.related_method_ids.map(r=>`<span class="tag tag-blue">${esc(r)}</span>`).join(''):''}<span class="text-xs font-medium ml-auto ${cp>=80?'text-green-600':cp>=60?'text-yellow-600':'text-red-600'}">${cp}%</span></div>${c.summary?`<p class="text-sm text-gray-800 dark:text-gray-200 mt-1 font-medium">${esc(c.summary)}</p>`:''}</div><span class="text-gray-400 text-sm ml-2" x-text="o?'▾':'▸'"></span></div><div x-show="o" class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">${f}</div></div>`;
+        }).join('');
+        h += sec('核心观点', ch);
+    }
+    // Validations
+    if (report.validations?.length) {
+        const cm = {}; if(report.claims) report.claims.forEach(c=>{cm[c.id]=c;});
+        let vh = report.validations.map(v=>{
+            const cl = cm[v.claim_id]; const sm = cl?.summary||(cl?.statement||'').slice(0,80);
+            let ex = '';
+            if(v.generated_code) ex+=`<details class="mt-2"><summary class="cursor-pointer text-xs text-blue-500 hover:text-blue-700">验证代码</summary><pre class="bg-gray-900 text-green-400 rounded p-3 mt-1 text-xs overflow-x-auto font-mono max-h-60">${esc(v.generated_code)}</pre></details>`;
+            if(v.execution_output) ex+=`<details class="mt-1"><summary class="cursor-pointer text-xs text-blue-500 hover:text-blue-700">执行输出</summary><pre class="bg-gray-900 text-gray-300 rounded p-3 mt-1 text-xs overflow-x-auto font-mono max-h-40 overflow-y-auto">${esc(v.execution_output)}</pre></details>`;
+            return `<div class="border-b border-gray-100 dark:border-gray-700 pb-3 mb-3 last:border-0"><div class="flex items-center gap-2 flex-wrap mb-1"><span class="text-xs font-mono text-blue-500">${esc(v.claim_id)}</span><span class="tag text-xs ${VERDICT_COLOR[v.verdict]||'bg-gray-100 text-gray-600'}">${VERDICT_ZH[v.verdict]||v.verdict}</span></div><p class="text-sm text-gray-700 dark:text-gray-300">${esc(sm)}</p>${v.evidence?`<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${esc(v.evidence.slice(0,300))}</p>`:''}${ex}</div>`;
+        }).join('');
+        h += sec('验证结果', vh);
+    }
+    // Limitations
+    if (report.limitations?.length) {
+        const sorted = [...report.limitations].sort((a,b)=>{const o={critical:0,high:1,medium:2,low:3};return (o[a.severity]??99)-(o[b.severity]??99);});
+        let lh = sorted.map(l=>`<div class="card mb-3 border-l-3 ${l.severity==='critical'?'border-red-400':l.severity==='high'?'border-orange-400':'border-gray-300'}"><div class="flex items-center gap-2 mb-2 flex-wrap"><span class="tag ${SEV_COLOR[l.severity]||'bg-gray-100 text-gray-600'}">${SEVERITY_ZH[l.severity]||l.severity}</span><span class="tag bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">${LIM_CAT_ZH[l.category]||l.category}</span></div><p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">${esc(l.description)}</p>${l.suggested_fix?`<p class="mt-2 text-xs text-gray-500 dark:text-gray-400"><span class="font-medium">建议:</span> ${esc(l.suggested_fix)}</p>`:''}</div>`).join('');
+        h += sec('局限性分析', lh);
+    }
+    // Summary
+    if (report.summary) h += sec('总结',`<div class="text-gray-700 dark:text-gray-300 leading-relaxed space-y-3">${esc(report.summary).replace(/\n\n/g,'</p><p class="mt-3">').replace(/\n/g,'<br>')}</div>`);
+    return h;
+}
+function sec(title, content) { return `<div class="mb-8"><h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">${title}</h2>${content}</div>`; }
+
+// ── Alpine Data Components ──
+document.addEventListener('alpine:init', () => {
+    Alpine.data('app', function() {
+        return {
+            page:'home', dark:false, jobId:null, sse:null, currentReport:null, reportHTML:'', loadingReport:false, jobHistory:[],
+            validateEnabled: false,
+            upload:{ file:null, dragging:false, uploading:false, error:'',
+                formatSize(b){return b?b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(2)+' MB':'';},
+                handleDrop(e){ this.dragging=false; const f=e.dataTransfer.files[0]; if(f&&f.name.toLowerCase().endsWith('.pdf')){this.file=f;this.error='';}else{this.error='只支持 PDF 文件';} },
+                handleFileInput(e){ const f=e.target.files[0]; if(f){this.file=f;this.error='';} },
+                removeFile(){ this.file=null; },
+            },
+            progress: (()=>{
+                const phs = PHASE_ORDER.map(p=>({key:p,label:PHASE_LABELS[p]||p,status:'pending',detail:'',subs:[]}));
+                let timer=null, start=0, llm='';
+                return {
+                    phases:phs, percentage:0, elapsed:0, llmOutput:'', llmVisible:false,
+                    reset(){ this.phases=PHASE_ORDER.map(p=>({key:p,label:PHASE_LABELS[p]||p,status:'pending',detail:'',subs:[]})); this.percentage=0; this.elapsed=0; this.llmOutput=''; this.llmVisible=false; if(timer)clearInterval(timer); },
+                    startTimer(){ start=Date.now(); timer=setInterval(()=>{this.elapsed=Math.floor((Date.now()-start)/1000);},1000); },
+                    stopTimer(){ if(timer){clearInterval(timer);timer=null;} },
+                    handleEvent(evt){ const {phase,step,detail,elapsed,pct}=evt; if(!phase)return; const ph=this.phases.find(p=>p.key===phase); if(!ph)return; if(step==='start')ph.status='running'; else if(step==='done'){ph.status='passed';ph.detail=detail;} else if(step==='error'){ph.status='error';ph.detail=detail;} else if(step==='skip'){ph.status='skipped';ph.detail=detail;} else if(step==='step'){ph.status='running';ph.detail=detail;} else if(step==='sub'){ph.subs.unshift(detail);if(ph.subs.length>20)ph.subs.pop();} if(pct!==undefined)this.percentage=pct; if(elapsed!==undefined)this.elapsed=Math.floor(elapsed); },
+                    handleLLMChunk(data){ if(data.text){this.llmOutput+=data.text;this.llmVisible=true;} },
+                    formatTime(s){ const m=Math.floor(s/60),sec=s%60; return m>0?m+'m '+String(sec).padStart(2,'0')+'s':sec+'s'; },
+                    phaseIconClass(ph){ if(ph.status==='running')return'text-yellow-500';if(ph.status==='passed')return'text-green-500';if(ph.status==='error')return'text-red-500';if(ph.status==='skipped')return'text-gray-400';return'text-gray-600 dark:text-gray-500'; },
+                };
+            })(),
+            settings:{
+                config:null, models:[], loading:true, saving:false, toast:{show:false,message:'',type:'success'},
+                modelRoles:[
+                    {key:'extraction',label:'方法论与观点提取',desc:'两阶段提取 (方法骨架 + 因果链主张)'},
+                    {key:'code_generation',label:'验证代码生成',desc:'为每一条 claim 生成 toy validation script'},
+                    {key:'parsing',label:'PDF 解析',desc:'章节标题识别 (LLM 辅助)'},
+                    {key:'comparison',label:'验证结果对照',desc:'对比执行输出与原始主张'},
+                    {key:'limitation',label:'局限性分析',desc:'六维度局限性审查'},
+                    {key:'summarization',label:'论文总结',desc:'逐 claim 摘要 + 整体总结'},
+                ],
+                async load(){ this.loading=true; try{const[c,m]=await Promise.all([API.getConfig(),API.getModels()]);this.config=c;this.models=m.models||[];}catch(e){this.toast={show:true,message:'加载配置失败: '+e.message,type:'error'};setTimeout(()=>this.toast.show=false,3000);} this.loading=false; },
+                async save(){ this.saving=true; try{await API.updateConfig(this.config);this.toast={show:true,message:'配置已保存',type:'success'};setTimeout(()=>this.toast.show=false,3000);}catch(e){this.toast={show:true,message:'保存失败: '+e.message,type:'error'};setTimeout(()=>this.toast.show=false,3000);} this.saving=false; },
+            },
+            toast:{show:false,message:'',type:'success'},
+            init(){
+                this.dark=localStorage.getItem('theme')==='dark'||(!localStorage.getItem('theme')&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+                this.applyTheme(); this.loadJobHistory(); window.addEventListener('hashchange',()=>this.route()); this.route();
+            },
+            toggleTheme(){ this.dark=!this.dark; localStorage.setItem('theme',this.dark?'dark':'light'); this.applyTheme(); },
+            applyTheme(){ document.documentElement.classList.toggle('dark',this.dark); },
+            route(){
+                const hash=window.location.hash.slice(1)||'home';
+                if(hash.startsWith('results/')){ this.page='results'; this.loadReport(hash.replace('results/','')); }
+                else if(hash==='settings'){ this.page='settings'; this.settings.load(); }
+                else{ this.page='home'; }
+            },
+            navigate(page){ window.location.hash=page; },
+            async startAnalysis(){
+                if(!this.upload.file)return; this.upload.uploading=true;
+                try{
+                    const fd=new FormData();fd.append('file',this.upload.file);
+                    if(this.validateEnabled)fd.append('validate','true');
+                    const res=await fetch('/api/jobs',{method:'POST',body:fd});
+                    if(!res.ok)throw new Error(await res.text());
+                    const {job_id}=await res.json();
+                    this.jobId=job_id; this.progress.reset(); this.progress.startTimer();
+                    this.sse=new SSEClient(API.getStreamUrl(job_id),{
+                        progress:d=>this.progress.handleEvent(d),
+                        llm_chunk:d=>this.progress.handleLLMChunk(d),
+                        job_done:async()=>{ this.progress.stopTimer(); this.progress.percentage=100; this.toast={show:true,message:'分析完成',type:'success'};setTimeout(()=>this.toast.show=false,3000); this.loadJobHistory(); await this.loadReport(job_id); this.navigate('results/'+job_id); },
+                        job_error:d=>{ this.progress.stopTimer(); this.toast={show:true,message:'分析失败: '+(d.error||'未知错误'),type:'error'};setTimeout(()=>this.toast.show=false,3000); this.loadJobHistory(); },
+                    });
+                    this.sse.connect();
+                }catch(e){ this.toast={show:true,message:'启动失败: '+e.message,type:'error'};setTimeout(()=>this.toast.show=false,3000); }
+                this.upload.uploading=false;
+            },
+            cancelCurrentJob(){ if(this.jobId){ API.cancelJob(this.jobId); this.sse?.close(); this.progress.stopTimer(); this.toast={show:true,message:'已取消',type:'info'};setTimeout(()=>this.toast.show=false,3000); } },
+            async loadReport(jobId){ this.loadingReport=true; try{this.currentReport=await API.getReport(jobId);this.reportHTML=renderReport(this.currentReport);}catch(e){this.reportHTML=`<div class="text-center py-10 text-red-500">加载失败: ${e.message}</div>`;} this.loadingReport=false;
+                this.$nextTick(()=>{ setTimeout(()=>{ if(window.MathJax){ MathJax.typesetPromise(); } }, 100); }); },
+            downloadMarkdown(jobId){ window.open(API.getReportMDUrl(jobId||this.jobId),'_blank'); },
+            async loadJobHistory(){ try{this.jobHistory=await API.listJobs();}catch(e){} },
+        };
+    });
+});
+</script>
+</body>
+</html>

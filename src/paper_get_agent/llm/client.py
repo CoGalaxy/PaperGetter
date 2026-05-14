@@ -11,7 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 from openai import OpenAI
@@ -81,19 +81,32 @@ class LLMClient:
         task: str = "extraction",
         temperature: float | None = None,
         max_tokens: int | None = None,
+        on_chunk: Callable[[str], None] | None = None,
         **kwargs: Any,
     ) -> str:
-        """发送对话请求，返回文本响应."""
+        """发送对话请求，返回文本响应.
+
+        如果提供 on_chunk，使用流式模式，每收到一个 token 调用一次.
+        """
         model = self.get_model(task)
         params: dict[str, Any] = dict(
             model=model,
             messages=messages,  # type: ignore[arg-type]
             max_tokens=max_tokens or self.config.defaults.get("max_tokens", 4096),
         )
-        # reasoner 模型不接受 temperature
         if not self._is_reasoner(model):
             params["temperature"] = temperature or self.config.defaults.get("temperature", 0.1)
         params.update(kwargs)
+
+        if on_chunk:
+            params["stream"] = True
+            full: list[str] = []
+            for chunk in self._client.chat.completions.create(**params):
+                token = chunk.choices[0].delta.content or ""
+                if token:
+                    full.append(token)
+                    on_chunk(token)
+            return "".join(full)
 
         resp = self._client.chat.completions.create(**params)
         return resp.choices[0].message.content or ""
