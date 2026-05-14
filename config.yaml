@@ -10,6 +10,7 @@ llm:
     parsing: "deepseek-v4-flash"              # 长文本结构化
     comparison: "deepseek-v4-flash"           # 结果对比（便宜模型即可）
     limitation: "deepseek-v4-pro"       # 局限性分析，需要强推理
+    summarization: "deepseek-v4-pro"   # 论文总结，需要强推理提炼
 
   defaults:
     temperature: 0.1

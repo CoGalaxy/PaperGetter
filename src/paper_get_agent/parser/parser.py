@@ -105,49 +105,193 @@ class PaperParser:
     def _split_sections(self, text: str) -> list[Section]:
         """将文本按标题切分为章节.
 
-        支持中英文常见标题模式:
-          - 1. / 1.1 / 1.1.1 式编号标题
-          - I. / A. / (a) 式标题
-          - Introduction / Method / Related Work 等
-          - 引言 / 方法 / 相关工作 等中文标题
+        优先用 LLM 识别标题（准确、理解上下文），不可用时回退到正则.
         """
-        # 标题模式（英文 + 中文）
-        patterns = [
-            # 编号标题: "1. Introduction" / "2.1 方法"
-            r"^(?:\d+\.?)+\s+\w[\w\s]*$",
-            # 英文标题: "Introduction", "Related Work"
-            r"^(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,6})$",
-            # 中文标题: "引言"
-            r"^(?:[一-鿿][一-鿿\s]{1,20})$",
-        ]
-        section_re = re.compile("|".join(f"({p})" for p in patterns), re.MULTILINE)
-
         lines = text.split("\n")
-        headings: list[tuple[int, str]] = []  # (line_index, heading_text)
 
+        # 尝试 LLM 识别
+        if self.llm is not None:
+            try:
+                headings = self._llm_detect_headings(lines)
+                if headings:
+                    return self._build_sections(lines, headings)
+            except Exception:
+                pass  # LLM 失败，回退正则
+
+        # 回退：正则匹配
+        headings = self._regex_detect_headings(lines)
+        return self._build_sections(lines, headings)
+
+    # ── LLM 标题识别 ────────────────────────
+
+    HEADING_DETECTION_PROMPT = """你是一个 PDF 解析器。以下是从一篇学术论文中提取的候选行（每行格式: "行号|内容"）。
+
+请标注哪些行是真正的**章节标题**（section/subsection heading），并给出层级。
+
+判断标准:
+- 编号标题: "1. Introduction", "2.1 Method", "3.1.1 Data Preprocessing" → 是标题
+- 英文名词短语: "Related Work", "Experimental Setup", "Performance Comparison" → 是标题
+- 中文短语: "引言", "相关工作", "实验设置" → 是标题
+- 全大写的短行: "ABSTRACT", "INTRODUCTION", "CONCLUSION" → 是标题
+- 论文组成部分: "Abstract", "References", "Acknowledgments" → 是标题
+- 普通句子、数据行、公式、编号列表项(如 "1) xxx") → 不是标题
+- 论文中的变量定义行、单独的数字行 → 不是标题
+
+层级定义:
+- level 1: 一级标题 (如 "1. Introduction", "INTRODUCTION", "引言")
+- level 2: 二级标题 (如 "2.1 Method", "A. Related Work")
+- level 3: 三级及以下 (如 "2.1.1 Details")
+
+请输出 JSON，只包含被判定为标题的行:
+```json
+{
+  "headings": [
+    {"line": 行号, "text": "标题原文", "level": 1-3}
+  ]
+}
+```
+
+候选行:
+---
+{candidates}
+---"""
+
+    def _llm_detect_headings(self, lines: list[str]) -> list[tuple[int, str, int]]:
+        """用 LLM 从文本行中识别章节标题."""
+        # 1. 收集候选行：短行、在文本块之间、首字母大写或数字开头
+        candidates: list[tuple[int, str]] = []
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if not stripped or len(stripped) > 120:
+            if not stripped or len(stripped) > 150:
                 continue
-            if section_re.match(stripped):
-                headings.append((i, stripped))
+            # 过滤明显是正文句子的行（以小写字母开头）
+            if stripped[0].islower():
+                continue
+            # 过滤纯数字或纯符号行
+            if re.match(r'^[\d\s\.\-–—,;:!?()\[\]{}⟨⟩]+$', stripped):
+                continue
+            # 优先选择前后有空行的行（更可能是标题）
+            prev_blank = i == 0 or not lines[i - 1].strip()
+            next_blank = i == len(lines) - 1 or not lines[i + 1].strip()
+            if prev_blank or next_blank or len(stripped) < 60:
+                candidates.append((i, stripped))
 
+        if not candidates:
+            return []
+
+        # 2. 构建批量 prompt（控制 token 量，最多发 200 条候选）
+        if len(candidates) > 200:
+            # 优先保留更可能是标题的：前后有空行的、更短的
+            candidates.sort(key=lambda x: (
+                not (x[0] == 0 or not lines[x[0] - 1].strip()),  # 前面有空行优先
+                len(x[1]),  # 短行优先
+            ))
+            candidates = candidates[:200]
+            candidates.sort(key=lambda x: x[0])  # 恢复行号顺序
+
+        candidate_text = "\n".join(
+            f"{idx:04d}|{text}" for idx, text in candidates
+        )
+
+        # 3. 调用 LLM
+        result = self.llm.structured(
+            messages=[
+                {"role": "user", "content": self.HEADING_DETECTION_PROMPT.format(candidates=candidate_text)},
+            ],
+            response_model=HeadingDetectionResult,
+            task="parsing",
+            temperature=0.0,
+        )
+
+        # 4. 转换结果
+        headings: list[tuple[int, str, int]] = []
+        for h in result.headings:
+            headings.append((h.line, h.text, h.level))
+        return headings
+
+    # ── 回退: 正则标题识别 ──────────────────
+
+    @staticmethod
+    def _regex_detect_headings(lines: list[str]) -> list[tuple[int, str, int]]:
+        """正则匹配标题（LLM 不可用时的回退）."""
+        # 白名单: 只匹配已知论文章节名
+        known_headings = (
+            r"abstract|introduction|related\s*work|background|preliminar|"
+            r"method|proposed|approach|model|architecture|framework|"
+            r"experiment|evaluation|result|discussion|analysis|"
+            r"ablation|comparison|baseline|setup|implementation|"
+            r"conclusion|future\s*work|limitation|discussion|summary|"
+            r"acknowledgment|reference|bibliography|appendix|supplementary|"
+            r"abstract|摘要|引言|绪论|背景|相关工作|文献综述|"
+            r"方法|模型|架构|框架|算法|设计|"
+            r"实验|评估|结果|分析|讨论|"
+            r"消融|对比|基线|实施|实现|"
+            r"结论|展望|局限|不足|总结|"
+            r"致谢|参考文献|附录|补充"
+        )
+        # 编号 + 已知标题: "1. Introduction", "2.1 Method"
+        numbered_heading = re.compile(
+            rf"^(?:[\d]+\.?)*\s*({known_headings})\s*$",
+            re.IGNORECASE,
+        )
+        # 纯已知标题: "Introduction", "Related Work"
+        named_heading = re.compile(
+            rf"^\s*({known_headings})\s*$",
+            re.IGNORECASE,
+        )
+        # 全大写短行: "ABSTRACT", "INTRODUCTION"
+        allcaps_heading = re.compile(r"^[A-Z][A-Z\s\-–—]{2,40}$")
+
+        headings: list[tuple[int, str, int]] = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or len(stripped) > 100:
+                continue
+
+            m = numbered_heading.match(stripped)
+            if m:
+                level = PaperParser._guess_level(stripped)
+                headings.append((i, stripped, level))
+                continue
+
+            m = named_heading.match(stripped)
+            if m:
+                # 纯标题名，常见于无编号论文
+                h = stripped.lower()
+                if h in ("abstract", "references", "acknowledgments", "appendix", "conclusion"):
+                    headings.append((i, stripped, 1))
+                else:
+                    headings.append((i, stripped, 2))
+                continue
+
+            m = allcaps_heading.match(stripped)
+            if m:
+                headings.append((i, stripped, 1))
+                continue
+
+        return headings
+
+    # ── 根据标题构建 Section 列表 ────────────
+
+    @staticmethod
+    def _build_sections(
+        lines: list[str], headings: list[tuple[int, str, int]]
+    ) -> list[Section]:
+        """根据识别出的标题和原文行，构建 Section 列表."""
         if not headings:
-            # 无法识别标题，整篇作为一个 section
             return [Section(heading="全文", level=1, paragraphs=_clean_paragraphs(lines))]
 
         sections: list[Section] = []
-        for j, (line_idx, heading) in enumerate(headings):
+        for j, (line_idx, heading, level) in enumerate(headings):
             next_idx = headings[j + 1][0] if j + 1 < len(headings) else len(lines)
             body_lines = lines[line_idx + 1 : next_idx]
             sections.append(
                 Section(
                     heading=heading,
-                    level=self._guess_level(heading),
+                    level=level,
                     paragraphs=_clean_paragraphs(body_lines),
                 )
             )
-
         return sections
 
     @staticmethod
@@ -190,3 +334,18 @@ def _clean_paragraphs(lines: list[str]) -> list[str]:
     if buf:
         paras.append(" ".join(buf))
     return [p for p in paras if len(p) > 30]  # 过滤太短的噪音行
+
+
+# ── LLM 标题检测辅助模型 ────────────────────
+
+from pydantic import BaseModel, Field
+
+
+class HeadingItem(BaseModel):
+    line: int = Field(description="行号（候选行中的四位编号）")
+    text: str = Field(description="标题原文")
+    level: int = Field(default=1, description="层级 1-3")
+
+
+class HeadingDetectionResult(BaseModel):
+    headings: list[HeadingItem] = Field(default_factory=list)

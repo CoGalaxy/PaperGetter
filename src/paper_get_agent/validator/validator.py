@@ -15,9 +15,15 @@ from ..sandbox.sandbox import CodeSandbox
 CODE_GENERATION_PROMPT = """你是一位严谨的研究者，需要为一个学术观点编写验证代码。
 
 观点类型: {claim_type}
-观点陈述: {statement}
-相关上下文: {context}
-预设前提: {assumptions}
+
+因果链:
+- 问题: {problem}
+- 方法: {method_applied}
+- 机制: {mechanism}
+- 结果: {result}
+- 前提: {condition}
+
+隐含假设: {assumptions}
 
 请撰写一段 Python 代码来验证这个观点。
 要求:
@@ -32,7 +38,12 @@ CODE_GENERATION_PROMPT = """你是一位严谨的研究者，需要为一个学�
 
 COMPARISON_PROMPT = """你是一位论文审稿人。请对比论文主张与实际验证结果，给出判断。
 
-论文主张: {statement}
+论文主张:
+- 问题: {problem}
+- 方法: {method_applied}
+- 机制: {mechanism}
+- 预期结果: {result}
+- 前提: {condition}
 
 验证代码:
 ---
@@ -89,8 +100,11 @@ class ClaimValidator:
         """用 LLM 生成验证代码."""
         prompt = CODE_GENERATION_PROMPT.format(
             claim_type=claim.type.value,
-            statement=claim.statement,
-            context=claim.context[:500] or "无",
+            problem=claim.problem or "未指定",
+            method_applied=claim.method_applied or "未指定",
+            mechanism=claim.mechanism or "未指定",
+            result=claim.result or "未指定",
+            condition=claim.condition or "未指定",
             assumptions="; ".join(claim.assumptions) if claim.assumptions else "无",
         )
         code = self.llm.chat(
@@ -111,7 +125,11 @@ class ClaimValidator:
     def _compare(self, claim: Claim, code: str, output: str) -> tuple[Verdict, str]:
         """让 LLM 对比主张和执行结果."""
         prompt = COMPARISON_PROMPT.format(
-            statement=claim.statement,
+            problem=claim.problem or "未指定",
+            method_applied=claim.method_applied or "未指定",
+            mechanism=claim.mechanism or "未指定",
+            result=claim.result or "未指定",
+            condition=claim.condition or "未指定",
             code=code,
             output=output[:2000],
         )

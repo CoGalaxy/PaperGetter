@@ -65,14 +65,34 @@ class ClaimType(str, Enum):
 
 
 class Claim(BaseModel):
+    """核心主张 — 以因果链组织，回答"针对什么问题、用了什么方法、为什么有效、产生了什么结果、在什么前提下成立"."""
     id: str = ""  # 自动生成，如 claim-001
     type: ClaimType
-    statement: str                     # 一句话概括主张
-    context: str = ""                  # 原文中的上下文段落
-    assumptions: list[str] = Field(default_factory=list)  # 隐含假设
-    supporting_sections: list[str] = Field(default_factory=list)  # 原文支撑段落的 heading
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)  # 模型对该主张可靠性的初步判断
-    method_desc: str = ""              # 如果涉及实现，描述方法步骤
+
+    # ── 因果链（五个必须环节） ──
+    problem: str = ""          # 针对什么问题 / 观察到的现象
+    method_applied: str = ""   # 应用了什么方法 / 技术手段
+    mechanism: str = ""        # 该方法为什么能解决问题（因果逻辑，最核心的字段）
+    result: str = ""           # 产生了什么效果（量化或定性）
+    condition: str = ""        # 在什么假设/前提下成立；什么情况会导致不成立
+
+    # ── 元信息 ──
+    summary: str = ""                        # 一句话总结，由 Summarizer 生成
+    context: str = ""                        # 原文支撑段落
+    assumptions: list[str] = Field(default_factory=list)  # 隐含前提
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)  # 可靠性初步判断
+    related_method_ids: list[str] = Field(default_factory=list)  # 关联的方法论 ID
+
+    @property
+    def statement(self) -> str:
+        """从因果链合成一句话摘要，供进度展示、验证等下游使用."""
+        if self.result and self.mechanism:
+            return f"{self.mechanism[:60]} → {self.result[:60]}"
+        if self.result:
+            return self.result[:120]
+        if self.mechanism:
+            return self.mechanism[:120]
+        return self.problem[:120]
 
 
 class Experiment(BaseModel):
@@ -158,3 +178,37 @@ class AnalysisReport(BaseModel):
     limitations: list[Limitation] = Field(default_factory=list)
     overall_score: float = Field(default=0.0, ge=0.0, le=10.0)  # 论文综合评分
     summary: str = ""                   # 一两段总结
+
+
+# ── 中文标签映射 ────────────────────────────
+
+CLAIM_TYPE_ZH: dict[str, str] = {
+    "theoretical": "理论",
+    "empirical": "实验",
+    "comparative": "对比",
+    "design": "设计",
+}
+
+LIMITATION_CATEGORY_ZH: dict[str, str] = {
+    "method": "方法",
+    "experiment": "实验",
+    "theory": "理论",
+    "reproducibility": "可复现性",
+    "generalization": "泛化性",
+    "ethics": "伦理",
+}
+
+SEVERITY_ZH: dict[str, str] = {
+    "critical": "严重",
+    "high": "较高",
+    "medium": "中等",
+    "low": "较低",
+}
+
+VERDICT_ZH: dict[str, str] = {
+    "supported": "支持",
+    "partially_supported": "部分支持",
+    "not_supported": "不支持",
+    "unverifiable": "无法验证",
+    "error": "出错",
+}

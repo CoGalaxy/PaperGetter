@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from ..models.paper import Paper, Claim, Limitation, LimitationCategory
+from ..models.paper import Paper, Claim, Limitation, LimitationCategory, CLAIM_TYPE_ZH
 from ..llm.client import LLMClient
 
 
@@ -36,9 +36,11 @@ LIMITATION_PROMPT = """你是一位严格的论文审稿人。请系统性地分
 - suggested_fix: 如果可以改进，给出建议
 
 要求:
+- **最多列出 6 条**，按严重性从高到低排列，确保覆盖不同维度
 - 每条局限性必须具体，应当结合论文内容，不要泛泛而谈
 - 如果某维度没有问题，可以不说
 - 重点关注这篇论文特有的问题，而非该领域通用的局限
+- 如果潜在问题很多，优先选最致命的（critical/high severity）
 """
 
 
@@ -82,7 +84,17 @@ class LimitationAnalyzer:
     def _format_claims(claims: list[Claim]) -> str:
         if not claims:
             return "（暂未提取）"
-        lines = [f"- [{c.type.value}] {c.statement}" for c in claims]
+        lines: list[str] = []
+        for c in claims:
+            type_zh = CLAIM_TYPE_ZH.get(c.type.value, c.type.value)
+            lines.append(f"- [{type_zh}] 问题: {c.problem}")
+            lines.append(f"  方法: {c.method_applied}")
+            lines.append(f"  机制: {c.mechanism}")
+            lines.append(f"  结果: {c.result}")
+            lines.append(f"  前提: {c.condition}")
+            if c.assumptions:
+                lines.append(f"  假设: {'; '.join(c.assumptions)}")
+            lines.append("")
         return "\n".join(lines)
 
     @staticmethod

@@ -31,61 +31,84 @@ console = Console()
 # ── 进度显示 ──────────────────────────────
 
 STATUS_ICONS: dict[str, str] = {
-    "start": "[cyan]●[/]",
+    "start": "[cyan]○[/]",
     "step": "[yellow]◉[/]",
-    "sub": "[dim]○[/]",
+    "sub": "[dim]  [/]",
     "done": "[green]✔[/]",
     "skip": "[dim]─[/]",
     "error": "[red]✘[/]",
 }
 
 PHASE_LABELS: dict[str, str] = {
-    "parse": "解析 PDF",
-    "extract": "提取观点",
-    "validate": "验证观点",
-    "analyze": "局限性分析",
-    "report": "生成报告",
+    "parse": "1/5 解析 PDF",
+    "extract": "2/5 提取方法论与观点",
+    "validate": "3/5 验证观点",
+    "analyze": "4/5 局限性分析",
+    "summarize": "5/5 生成总结",
+    "report": "导出报告",
 }
+
+SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 class ProgressDisplay:
-    """收集进度事件并渲染为 Rich Live 面板."""
+    """收集进度事件并渲染为 Rich Live 面板.
+
+    三层粒度:
+    - phase: 大阶段 (parse/extract/validate/analyze/report)
+    - step: 阶段内步骤 (会随阶段推进更新)
+    - sub: 步骤内子步骤 (展示在对应阶段下方)
+    """
 
     def __init__(self) -> None:
         self.events: list[dict] = []
         self.start_time = time.time()
+        self._phase_starts: dict[str, float] = {}   # 每阶段何时开始
 
     def callback(self, phase: str, step: str, detail: str, elapsed: float) -> None:
+        now = time.time() - self.start_time
+        if step == "start":
+            self._phase_starts[phase] = now
         self.events.append({
             "phase": phase,
             "step": step,
             "detail": detail,
-            "time": time.time() - self.start_time,
+            "time": now,
         })
 
     def __rich__(self) -> Panel:
-        """Rich protocol: Live 每次刷新都会调用此方法."""
         lines: list[Text] = []
-        elapsed = time.time() - self.start_time
+        now = time.time() - self.start_time
 
-        # 标题行：运行时间实时更新
-        lines.append(
-            Text(f"Paper Get Agent  已运行 {elapsed:.0f}s", style="bold blue")
-        )
+        # ── 头部: 总运行时间 ──
+        mins, secs = divmod(int(now), 60)
+        ts = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+        lines.append(Text(f"Paper Get Agent  已运行 {ts}", style="bold blue"))
+
+        # ── 进度条 ──
+        phase_order = ["parse", "extract", "validate", "analyze", "summarize"]
+        done_count = sum(1 for p in phase_order if self._phase_done(p))
+        bar_width = 30
+        filled = int(bar_width * done_count / len(phase_order))
+        active_phase = self._active_phase()
+        if active_phase and active_phase in phase_order:
+            # 当前阶段的部分进度用不同字符
+            bar = "█" * filled + "▓" + "░" * (bar_width - filled - 1)
+        else:
+            bar = "█" * filled + "░" * (bar_width - filled)
+        lines.append(Text(f"  [{done_count}/{len(phase_order)}] {bar}", style="bold"))
+
         lines.append(Text(""))
 
-        # 未完成阶段显示 spinner 动画
-        spinner_frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-        frame_idx = int(elapsed * 10) % len(spinner_frames)
-        spinner = spinner_frames[frame_idx]
+        # ── 各阶段状态 ──
+        frame_idx = int(now * 10) % len(SPINNER_FRAMES)
+        spinner = SPINNER_FRAMES[frame_idx]
 
-        # 按 phase 分组最新状态
         phase_status: dict[str, dict] = {}
         for ev in self.events:
             phase_status[ev["phase"]] = ev
 
-        order = ["parse", "extract", "validate", "analyze", "report"]
-        for phase in order:
+        for phase in ["parse", "extract", "validate", "analyze", "summarize", "report"]:
             if phase not in phase_status:
                 continue
             ev = phase_status[phase]
@@ -93,39 +116,48 @@ class ProgressDisplay:
             label = PHASE_LABELS.get(phase, phase)
             detail = ev["detail"]
 
-            # 如果当前正在执行的阶段没完成，加 spinner
-            prefix = ""
-            if ev["step"] in ("start", "step") and phase == self._active_phase():
-                prefix = f"[yellow]{spinner}[/] "
+            # 每阶段已用时间
+            phase_elapsed = ""
+            if phase in self._phase_starts and not self._phase_done(phase):
+                pe = now - self._phase_starts[phase]
+                if pe > 1:
+                    pm, ps = divmod(int(pe), 60)
+                    phase_elapsed = f" [{pm}m {ps:02d}s]" if pm else f" [{ps}s]"
+
+            # 前缀
+            if ev["step"] in ("start", "step") and phase == active_phase:
+                prefix = f"[yellow]{spinner}[/] " if phase != "report" else "  "
             elif ev["step"] == "done":
                 prefix = f"  {icon} "
             elif ev["step"] == "error":
+                prefix = f"  {icon} "
+            elif ev["step"] == "skip":
                 prefix = f"  {icon} "
             else:
                 prefix = f"  {icon} "
 
             if ev["step"] == "done":
-                text = Text(f"{prefix}{label}: {detail}", style="green")
+                color = "green"
             elif ev["step"] == "error":
-                text = Text(f"{prefix}{label}: {detail}", style="red")
-            elif ev["step"] in ("start", "step"):
-                text = Text(f"{prefix}{label}: {detail}", style="yellow")
-            elif ev["step"] == "sub":
-                text = Text(f"     {icon} {detail}", style="dim")
+                color = "red"
+            elif ev["step"] in ("start", "step") and phase == active_phase:
+                color = "yellow"
+            elif ev["step"] == "skip":
+                color = "dim"
             else:
-                text = Text(f"{prefix}{label}: {detail}")
+                color = "white"
 
+            text = Text(f"{prefix}{label}: {detail}{phase_elapsed}", style=color)
             lines.append(text)
 
-            # validate 阶段展开最近子步骤
-            if phase == "validate":
-                subs = [
-                    e for e in self.events
-                    if e["phase"] == "validate" and e["step"] == "sub"
-                ][-5:]
-                for sub in subs:
-                    dt = sub["detail"]
-                    lines.append(Text(f"       {dt}", style="dim"))
+            # ── 展开子步骤 (不限于 validate) ──
+            subs = [
+                e for e in self.events
+                if e["phase"] == phase and e["step"] == "sub"
+            ][-6:]
+            for sub in subs:
+                st = sub["time"]
+                lines.append(Text(f"       {icon} {sub['detail']}", style="dim"))
 
         return Panel(
             Text.assemble(*[t + Text("\n") for t in lines]),
@@ -133,14 +165,17 @@ class ProgressDisplay:
             border_style="blue",
         )
 
-    def _active_phase(self) -> str | None:
-        """返回当前正在执行（未完成）的阶段."""
-        done_phases: set[str] = set()
+    def _phase_done(self, phase: str) -> bool:
         for ev in self.events:
-            if ev["step"] == "done":
-                done_phases.add(ev["phase"])
-        for p in ["parse", "extract", "validate", "analyze", "report"]:
-            if p in {ev["phase"] for ev in self.events} and p not in done_phases:
+            if ev["phase"] == phase and ev["step"] == "done":
+                return True
+        return False
+
+    def _active_phase(self) -> str | None:
+        for p in ["parse", "extract", "validate", "analyze", "summarize", "report"]:
+            has_events = any(e["phase"] == p for e in self.events)
+            is_done = self._phase_done(p)
+            if has_events and not is_done:
                 return p
         return None
 
@@ -219,6 +254,13 @@ def main(paper_path: str, output: str, skip_validate: bool, config: str) -> None
     console.print(f"  验证结果: {len(report.validations)} 条")
     console.print(f"  发现局限: {len(report.limitations)} 条")
 
+    # ── Per-claim 摘要 ──
+    if report.claims and any(c.summary for c in report.claims):
+        console.print("\n[bold]核心主张摘要:[/]")
+        for c in report.claims:
+            if c.summary:
+                console.print(f"  • [cyan]{c.id}[/] {c.summary}")
+
     if report.validations:
         claim_map = {c.id: c.statement for c in report.claims}
         table = Table(title="验证摘要")
@@ -231,6 +273,7 @@ def main(paper_path: str, output: str, skip_validate: bool, config: str) -> None
         console.print(table)
 
     if report.limitations:
+        from paper_get_agent.models.paper import LIMITATION_CATEGORY_ZH, SEVERITY_ZH
         console.print("\n[bold]主要局限性:[/]")
         for lim in report.limitations[:5]:
             sev_color = {
@@ -240,9 +283,11 @@ def main(paper_path: str, output: str, skip_validate: bool, config: str) -> None
                 "critical": "red",
             }
             color = sev_color.get(lim.severity, "white")
+            sev_zh = SEVERITY_ZH.get(lim.severity, lim.severity)
+            cat_zh = LIMITATION_CATEGORY_ZH.get(lim.category.value, lim.category.value)
             console.print(
-                f"  • [{color}]{lim.severity}[/] "
-                f"[{lim.category.value}] {lim.description[:120]}"
+                f"  • [{color}]{sev_zh}[/] "
+                f"[{cat_zh}] {lim.description[:120]}"
             )
 
     console.print(f"\n[dim]报告已保存至: {json_path}[/]")

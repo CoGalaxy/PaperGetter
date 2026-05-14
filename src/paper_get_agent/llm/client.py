@@ -162,7 +162,8 @@ class LLMClient:
                         ),
                     })
 
-        raise ValueError(f"JSON 解析失败 ({max_retries + 1} 次尝试): {last_error}") from last_error
+        tail = last_text[-300:] if len(last_text) > 300 else last_text
+        raise ValueError(f"JSON 解析失败 ({max_retries + 1} 次尝试): {last_error}; 响应末尾: {tail}") from last_error
 
     def _structured_normal(
         self,
@@ -172,11 +173,12 @@ class LLMClient:
         max_retries: int,
         **kwargs: Any,
     ) -> Any:
-        """通用模型: 使用 response_format json_object."""
+        """通用模型: 使用 response_format json_object, 失败时反馈错误重试."""
         msgs = [dict(m) for m in messages]
         last = msgs[-1]
         last["content"] = f"{last['content']}\n\n请输出纯 JSON，不要加 markdown 代码块。"
 
+        last_error = None
         for attempt in range(max_retries + 1):
             try:
                 text = self._chat_raw(
@@ -187,11 +189,24 @@ class LLMClient:
                 )
                 return response_model.model_validate_json(text)
             except Exception as e:
-                if attempt == max_retries:
-                    # 最后一次尝试失败，退回 reasoner 策略
-                    return self._structured_reasoner(messages, response_model, model, 0, **kwargs)
+                last_error = e
+                if attempt < max_retries:
+                    msgs.append({"role": "assistant", "content": "[JSON 解析失败]"})
+                    msgs.append({
+                        "role": "user",
+                        "content": (
+                            f"上次输出的 JSON 解析失败 ({e})。"
+                            f"请严格按照要求输出纯 JSON，不要加 markdown 代码块。"
+                        ),
+                    })
 
-        raise RuntimeError("unreachable")
+        # 所有重试耗尽，退回 reasoner 策略
+        try:
+            return self._structured_reasoner(messages, response_model, model, 0, **kwargs)
+        except Exception as reasoner_err:
+            raise ValueError(
+                f"JSON 解析失败 (normal + reasoner 均失败): {last_error}; reasoner: {reasoner_err}"
+            ) from reasoner_err
 
     def _chat_raw(self, model: str, messages: list[dict], **kwargs: Any) -> str:
         """底层 API 调用，不做任何包装."""
@@ -227,7 +242,6 @@ class LLMClient:
         m = re.search(r"```json\s*([\s\S]*)", text)
         if m:
             json_str = m.group(1).strip()
-            # 尝试修复: 补全可能缺失的闭合括号
             json_str = LLMClient._try_fix_truncated_json(json_str)
             return response_model.model_validate_json(json_str)
 
@@ -238,7 +252,11 @@ class LLMClient:
             return response_model.model_validate_json(text[first_brace:last_brace + 1])
 
         # 策略 5: 整个文本就是 JSON
-        return response_model.model_validate_json(text.strip())
+        try:
+            return response_model.model_validate_json(text.strip())
+        except Exception:
+            tail = text[-300:] if len(text) > 300 else text
+            raise ValueError(f"无法从 LLM 回复中提取 JSON，响应末尾: {tail}")
 
     @staticmethod
     def _try_fix_truncated_json(json_str: str) -> str:
