@@ -18,3 +18,5 @@ papers/
 # IDE
 .vscode/
 .idea/
+docs/
+CLAUDE.md

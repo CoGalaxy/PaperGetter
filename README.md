@@ -95,8 +95,8 @@ PDF ──→ [Parser] ──→ Paper ──→ [Extractor] ──→ Methodolo
 
 | 组件 | 文件 | LLM 调用 | 职责 |
 |------|------|---------|------|
-| **Parser** | `parser/parser.py` | 1 次（标题识别） | PyMuPDF 提取全文 + LLM 识别章节标题，输出 `Paper` |
-| **Extractor** | `extractor/extractor.py` | 2 次（Pass 1 方法 + Pass 2 主张） | 提取方法论骨架（步骤/公式/创新点）→ 因果链主张 + 前提展开 + 去重合并 |
+| **Parser** | `parser/parser.py` | 2 次（元信息 + 标题识别） | PyMuPDF 提取全文 + LLM 提取作者/venue/DOI 等元信息 + LLM 识别章节标题，输出 `Paper` |
+| **Extractor** | `extractor/extractor.py` | 2 次（Pass 1 方法 + Pass 2 主张） | 提取方法论骨架（步骤/公式/创新点）→ 因果链主张 + 前提展开 + 去重合并 + 原文溯源；智能按章节重要性分配上下文预算 |
 | **Validator** | `validator/validator.py` | 每 claim 2 次 | 生成 toy script → 沙箱执行 → LLM 对照判断 (supported / partially / not) |
 | **Analyzer** | `analyzer/analyzer.py` | 1 次 | 6 维度局限性审查，含严重性评级和建议 |
 | **Summarizer** | `summarizer/summarizer.py` | 1 次 | 每条 claim 一句话摘要 + 整篇论文 2-3 段总结，结合发表年代语境 |
@@ -125,12 +125,14 @@ Claim
 ├── result: str             # 产生了什么效果
 ├── condition: str          # 在什么前提下成立
 ├── summary: str            # 一句话摘要（Summarizer 生成）
+├── context: str            # 原文支撑段落（附章节编号引用）
+├── source_sections: [str]  # 来源章节，如 ["第3节: Experiments"]
 ├── assumptions: [str]      # 隐含前提
 ├── confidence: float       # 可靠性 0-1
 └── related_method_ids: [str]  # 关联的方法论
 ```
 
-如果原文对某个环节未论述，LLM 会标注 `缺失：原文未论述` 而非编造。
+如果原文对某个环节未论述，LLM 会标注 `缺失：原文未论述` 而非编造。每条主张可追溯到原文段落。
 
 ### 完整报告结构
 
@@ -162,8 +164,8 @@ paper_get_agent/
 ├── src/paper_get_agent/
 │   ├── models/paper.py               # Pydantic 数据模型 + 中文标签映射
 │   ├── llm/client.py                 # OpenAI 兼容客户端（流式/结构化/自适应）
-│   ├── parser/parser.py              # PDF → Paper（PyMuPDF + LLM 标题识别 + 年份解析）
-│   ├── extractor/extractor.py        # 两阶段提取：方法骨架 → 因果链主张 + 去重
+│   ├── parser/parser.py              # PDF → Paper（PyMuPDF + LLM 元信息提取 + 标题识别）
+│   ├── extractor/extractor.py        # 两阶段提取：方法骨架 → 因果链主张 + 去重 + 原文溯源 + 智能裁剪
 │   ├── validator/validator.py        # 靶向验证：生成代码 → 沙箱执行 → 对照
 │   ├── analyzer/analyzer.py          # 6 维度局限性分析
 │   ├── summarizer/summarizer.py      # 逐 claim 摘要 + 整体总结（含年代语境）
@@ -202,10 +204,10 @@ paper_get_agent/
 
 ## 已知局限
 
-- **章节标题识别**：LLM 识别准确但不完美，部分排版特殊的论文可能出现章节切分错误。不可用时自动回退正则。
+- **元信息提取**：作者/venue/DOI 依赖 LLM 从首页识别，部分排版特殊的论文可能提取不全。不可用时回退 regex。
 - **代码验证**：目前为实验性功能，toy script 成功率不稳定。Web 端默认关闭，CLI 通过 `--skip-validate` 跳过。
 - **单用户设计**：Web 后端使用内存存储，重启丢失任务历史。多用户场景需引入持久化层。
-- **长论文截断**：超过 64K 字符的论文会被截断，极长论文可能丢失尾部内容。
+- **长论文处理**：采用按重要性分级裁剪策略——核心章节保留全文，背景/附录压缩。极长论文的尾部章节仍可能被压缩。
 
 ## License
 

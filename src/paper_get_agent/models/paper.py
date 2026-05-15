@@ -78,7 +78,8 @@ class Claim(BaseModel):
 
     # ── 元信息 ──
     summary: str = ""                        # 一句话总结，由 Summarizer 生成
-    context: str = ""                        # 原文支撑段落
+    context: str = ""                        # 原文支撑段落，含章节编号引用
+    source_sections: list[str] = Field(default_factory=list)  # 来源章节引用，如 ["第3节: Experiments"]
     assumptions: list[str] = Field(default_factory=list)  # 隐含前提
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)  # 可靠性初步判断
     related_method_ids: list[str] = Field(default_factory=list)  # 关联的方法论 ID

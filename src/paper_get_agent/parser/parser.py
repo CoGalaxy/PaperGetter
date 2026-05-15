@@ -10,7 +10,7 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
-from ..models.paper import Paper, PaperMeta, Section
+from ..models.paper import Author, Paper, PaperMeta, Section
 from ..llm.client import LLMClient
 
 
@@ -62,32 +62,93 @@ class PaperParser:
     # ── 内部方法 ────────────────────────────
 
     def _extract_meta(self, doc: fitz.Document, raw_text: str, file_path: Path) -> PaperMeta:
-        """从 PDF metadata 和文本中提取论文元信息."""
+        """提取论文元信息: LLM 优先，不可用时回退 regex."""
         pdf_meta = doc.metadata or {}
+        head = raw_text[:5000]  # 前 5000 字符足够覆盖标题+作者+摘要
 
-        # 先尝试从 PDF 元信息中拿
-        title = pdf_meta.get("title", "")
-        authors_raw = pdf_meta.get("author", "")
+        # 先尝试 LLM 结构化提取
+        if self.llm is not None:
+            try:
+                meta = self._llm_extract_meta(head, pdf_meta, file_path)
+                if meta.title:  # LLM 至少拿到了标题才信任
+                    # 补充 arxiv ID（regex 更可靠）
+                    arxiv_id, year_from_arxiv = self._regex_arxiv_id(raw_text[:3000])
+                    if arxiv_id and not meta.arxiv_id:
+                        meta.arxiv_id = arxiv_id
+                    if year_from_arxiv and not meta.year:
+                        meta.year = year_from_arxiv
+                    return meta
+            except Exception:
+                pass  # LLM 失败，回退 regex
 
-        # 前 2000 字符通常包含标题和作者
-        head = raw_text[:2000]
+        # 回退：纯 regex 提取
+        return self._regex_extract_meta(raw_text, pdf_meta, file_path)
 
-        # 用规则提取标题（第一行非空文本）
-        if not title:
-            lines = [l.strip() for l in head.split("\n") if l.strip()]
-            title = lines[0] if lines else file_path.stem
+    def _llm_extract_meta(
+        self, head: str, pdf_meta: dict, file_path: Path
+    ) -> PaperMeta:
+        """用 LLM 从论文首页提取元信息."""
+        prompt = (
+            "你是一个 PDF 元信息提取器。请从以下学术论文首页文本中提取元信息。\n\n"
+            "规则:\n"
+            "- title: 论文完整标题（不要截断）\n"
+            "- authors: 作者列表，每人包含 name 和 affiliation（如果能识别）\n"
+            "- venue: 发表的会议/期刊名称\n"
+            "- year: 发表年份（4 位数字）\n"
+            "- doi: DOI 号（如有）\n"
+            "- abstract: 摘要全文\n"
+            "- 如果某项无法识别，留空\n\n"
+            f"PDF 内置元数据（可能不准确，仅供参考）:\n"
+            f"  title: {pdf_meta.get('title', '')}\n"
+            f"  author: {pdf_meta.get('author', '')}\n\n"
+            f"论文首页文本:\n---\n{head}\n---"
+        )
+        result = self.llm.structured(
+            messages=[{"role": "user", "content": prompt}],
+            response_model=MetaExtractionResult,
+            task="parsing",
+            temperature=0.0,
+        )
+        authors = [
+            Author(name=a.name, affiliation=a.affiliation)
+            for a in result.authors
+        ]
+        return PaperMeta(
+            title=result.title[:300] if result.title else file_path.stem,
+            authors=authors,
+            venue=result.venue or None,
+            year=result.year or None,
+            doi=result.doi or None,
+            source_path=str(file_path),
+            abstract=result.abstract or "",
+        )
 
-        # 用正则提取 arxiv ID
-        arxiv_id: str | None = None
-        year: int | None = None
-        m = re.search(r"arXiv[:\s]*(\d{4}\.\d{4,5})", raw_text[:3000], re.IGNORECASE)
+    @staticmethod
+    def _regex_arxiv_id(text: str) -> tuple[str | None, int | None]:
+        """从文本中提取 arxiv ID 和年份."""
+        m = re.search(r"arXiv[:\s]*(\d{4}\.\d{4,5})", text, re.IGNORECASE)
         if m:
             arxiv_id = m.group(1)
             try:
                 yy = int(arxiv_id[:2])
                 year = 2000 + yy if yy < 91 else 1900 + yy
+                return arxiv_id, year
             except (ValueError, IndexError):
-                pass
+                return arxiv_id, None
+        return None, None
+
+    def _regex_extract_meta(
+        self, raw_text: str, pdf_meta: dict, file_path: Path
+    ) -> PaperMeta:
+        """纯正则回退方案."""
+        title = pdf_meta.get("title", "")
+        head = raw_text[:2000]
+
+        if not title:
+            lines = [l.strip() for l in head.split("\n") if l.strip()]
+            title = lines[0] if lines else file_path.stem
+
+        arxiv_id, year = self._regex_arxiv_id(raw_text[:3000])
 
         return PaperMeta(
             title=title[:300],
@@ -356,3 +417,20 @@ class HeadingItem(BaseModel):
 
 class HeadingDetectionResult(BaseModel):
     headings: list[HeadingItem] = Field(default_factory=list)
+
+
+# ── LLM 元信息提取辅助模型 ──────────────────
+
+
+class MetaAuthorItem(BaseModel):
+    name: str = Field(description="作者姓名")
+    affiliation: str = Field(default="", description="所属机构")
+
+
+class MetaExtractionResult(BaseModel):
+    title: str = Field(default="", description="论文完整标题")
+    authors: list[MetaAuthorItem] = Field(default_factory=list, description="作者列表")
+    venue: str = Field(default="", description="会议/期刊名称")
+    year: int | None = Field(default=None, description="发表年份")
+    doi: str = Field(default="", description="DOI 号")
+    abstract: str = Field(default="", description="摘要全文")

@@ -457,9 +457,12 @@ function renderReport(report) {
     const p = report.paper || {};
     let h = '';
     // Header
+    const authorStr = p.authors?.length ? p.authors.map(a => a.name + (a.affiliation ? ` (${a.affiliation})` : '')).join(', ') : '';
     h += `<div class="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-3">${esc(p.title||'未命名论文')}</h1>
+        ${authorStr?`<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${esc(authorStr)}</p>`:''}
         <div class="flex flex-wrap gap-2 mb-2 text-sm text-gray-500 dark:text-gray-400">
+            ${p.venue?`<span class="tag">${esc(p.venue)}</span>`:''}
             ${p.year?`<span class="tag">${p.year}</span>`:''}
             ${p.arxiv_id?`<a href="https://arxiv.org/abs/${p.arxiv_id}" target="_blank" class="tag tag-link">arXiv:${p.arxiv_id}</a>`:''}
             ${p.doi?`<a href="https://doi.org/${p.doi}" target="_blank" class="tag tag-link">DOI:${p.doi}</a>`:''}
@@ -487,8 +490,9 @@ function renderReport(report) {
         let ch = report.claims.map((c,i) => {
             let f = '';
             ['问题','方法','机制','结果','前提'].forEach((lb,k) => { const v = [c.problem,c.method_applied,c.mechanism,c.result,c.condition][k]; if(v) f+=`<div class="mb-1.5"><span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">${lb}</span><p class="text-sm text-gray-700 dark:text-gray-300 mt-0.5">${esc(v)}</p></div>`; });
+            if (c.source_sections?.length) f+=`<div class="mb-1.5"><span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">来源</span><p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">${c.source_sections.map(s=>esc(s)).join('; ')}</p></div>`;
             if (c.assumptions?.length) f+=`<div class="mb-1.5"><span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">隐含假设</span><p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">${c.assumptions.map(a=>esc(a)).join('; ')}</p></div>`;
-            if (c.context) f+=`<blockquote class="border-l-2 border-gray-300 dark:border-gray-600 pl-3 my-2 text-xs text-gray-400 dark:text-gray-500 italic">${esc(c.context.slice(0,200))}</blockquote>`;
+            if (c.context) f+=`<blockquote class="border-l-2 border-gray-300 dark:border-gray-600 pl-3 my-2 text-xs text-gray-400 dark:text-gray-500 italic">${esc(c.context.slice(0,300))}</blockquote>`;
             const cp = Math.round((c.confidence||0)*100);
             return `<div class="card mb-3" x-data="{o:${i===0}}"><div class="flex items-center justify-between cursor-pointer" @click="o=!o"><div class="flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="text-xs text-blue-500 font-mono">${esc(c.id)}</span><span class="tag tag-purple">${CLAIM_TYPE_ZH[c.type]||c.type}</span>${c.related_method_ids?.length?c.related_method_ids.map(r=>`<span class="tag tag-blue">${esc(r)}</span>`).join(''):''}<span class="text-xs font-medium ml-auto ${cp>=80?'text-green-600':cp>=60?'text-yellow-600':'text-red-600'}">${cp}%</span></div>${c.summary?`<p class="text-sm text-gray-800 dark:text-gray-200 mt-1 font-medium">${esc(c.summary)}</p>`:''}</div><span class="text-gray-400 text-sm ml-2" x-text="o?'▾':'▸'"></span></div><div x-show="o" class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">${f}</div></div>`;
         }).join('');

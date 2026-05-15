@@ -280,10 +280,18 @@ def report_to_markdown(report: AnalysisReport) -> str:
     p = report.paper
     lines.append(f"# 论文分析报告: {p.title}")
     lines.append(f"\n- **分析时间**: {report.analyzed_at}")
+    if p.authors:
+        author_str = ", ".join(
+            f"{a.name}{f' ({a.affiliation})' if a.affiliation else ''}"
+            for a in p.authors
+        )
+        lines.append(f"- **作者**: {author_str}")
+    if p.venue:
+        lines.append(f"- **发表**: {p.venue}")
     if p.arxiv_id:
         lines.append(f"- **arXiv**: [{p.arxiv_id}](https://arxiv.org/abs/{p.arxiv_id})")
     if p.year:
-        lines.append(f"- **发表年份**: {p.year}")
+        lines.append(f"- **年份**: {p.year}")
     if p.doi:
         lines.append(f"- **DOI**: [{p.doi}](https://doi.org/{p.doi})")
 
@@ -341,10 +349,12 @@ def report_to_markdown(report: AnalysisReport) -> str:
                 if value:
                     lines.append(f"- **{label}**: {value}")
 
+            if c.source_sections:
+                lines.append(f"- **来源**: {'; '.join(c.source_sections)}")
             if c.assumptions:
                 lines.append(f"- **隐含假设**: {'; '.join(c.assumptions)}")
             if c.context:
-                lines.append(f"> 原文: {c.context[:200]}")
+                lines.append(f"> 原文: {c.context[:300]}")
             lines.append(f"  *置信度: {c.confidence:.0%}*")
 
     # ── 验证结果 ──
