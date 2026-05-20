@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 
 # 测试 & 工具缓存
 .pytest_cache/
