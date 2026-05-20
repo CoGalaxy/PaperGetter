@@ -100,26 +100,6 @@ PDF ──→ [Parser] ──→ Paper ──→ [Extractor] ──→ Methodolo
                                     Markdown + JSON + Web
 ```
 
-### 各组件
-
-| 组件 | 文件 | LLM 调用 | 职责 |
-|------|------|---------|------|
-| **Parser** | `parser/parser.py` | 2 次（元信息 + 标题识别） | PyMuPDF 提取全文 + LLM 提取作者/venue/DOI 等元信息 + LLM 识别章节标题，输出 `Paper` |
-| **Extractor** | `extractor/extractor.py` | 2 次（Pass 1 方法 + Pass 2 主张） | 提取方法论骨架（步骤/公式/创新点）→ 因果链主张 + 前提展开 + 去重合并 + 原文溯源；智能按章节重要性分配上下文预算 |
-| **Validator** | `validator/validator.py` | 每 claim 2 次 | 生成 toy script → 沙箱执行 → LLM 对照判断 (supported / partially / not) |
-| **Analyzer** | `analyzer/analyzer.py` | 1 次 | 6 维度局限性审查，含严重性评级和建议 |
-| **Summarizer** | `summarizer/summarizer.py` | 1 次 | 每条 claim 一句话摘要 + 整篇论文 2-3 段总结，结合发表年代语境 |
-| **Sandbox** | `sandbox/sandbox.py` | — | Docker 隔离执行（fallback subprocess），网络隔离，内存限制 |
-| **Orchestrator** | `orchestrator/graph.py` | — | 串联 5 阶段，实时进度回调，报告渲染与导出 |
-
-### LLM 客户端
-
-`llm/client.py` — OpenAI 兼容接口，按任务自动切换模型，自动适配两类模型：
-
-- **Reasoner 模型**（deepseek-v4-pro 等）— 不支持 `response_format`/`tool_choice`，采用 prompt 注入 JSON Schema + 多策略正则提取
-- **通用模型**（deepseek-v4-flash 等）— 使用 `response_format: json_object`，失败时回退 reasoner 策略
-- 支持流式输出 (`stream=True` + `on_chunk` 回调)，供 Web 前端实时展示 LLM 输出
-
 ## 数据模型
 
 ### Claim — 因果链结构
@@ -189,33 +169,11 @@ paper_get_agent/
 └── output/                           # 生成报告
 ```
 
-## Web 前端技术栈
-
-| 层 | 技术 | 说明 |
-|---|------|------|
-| 后端 | FastAPI + uvicorn | Pydantic 模型直接复用，SSE 原生支持 |
-| 实时通信 | Server-Sent Events | 单向推送进度 + LLM 流式输出，浏览器原生 `EventSource` |
-| 前端 | Alpine.js + Tailwind CSS CDN | 零构建步骤，无 npm，单 HTML 文件 |
-| 公式渲染 | MathJax 3 | `$$...$$` 块级公式，服务器端不参与渲染 |
-| PDF 导出 | `@media print` CSS | 浏览器打印 → 另存为 PDF，保留着色标签和卡片样式 |
-
-## 支持的 LLM
-
-通过 OpenAI 兼容接口对接，在 `config.yaml` 中自由切换：
-
-| 提供商 | 推理模型 | 通用模型 | API Base |
-|--------|---------|---------|----------|
-| DeepSeek | `deepseek-v4-pro` | `deepseek-v4-flash` | `api.deepseek.com` |
-| 阿里 Qwen | `qwen3-max` | `qwen3-plus` | `dashscope.aliyuncs.com` |
-| 月之暗面 | `kimi-k2` | `kimi-k2` | `api.moonshot.cn` |
-
-6 个 Agent 各自可指派不同模型，按任务特点选择：提取/分析/总结用推理模型，解析/代码生成/对照用通用模型。
 
 ## 已知局限
 
 - **元信息提取**：作者/venue/DOI 依赖 LLM 从首页识别，部分排版特殊的论文可能提取不全。不可用时回退 regex。
 - **代码验证**：目前为实验性功能，toy script 成功率不稳定。Web 端默认关闭，CLI 通过 `--skip-validate` 跳过。
-- **单用户设计**：Web 后端使用内存存储，重启丢失任务历史。多用户场景需引入持久化层。
 - **长论文处理**：采用按重要性分级裁剪策略——核心章节保留全文，背景/附录压缩。极长论文的尾部章节仍可能被压缩。
 
 ## License
