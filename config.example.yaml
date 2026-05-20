@@ -1,8 +1,8 @@
 # 模型配置 - 通过 AIHubMix / One-API 统一网关接入
 llm:
-  api_base: "https://api.deepseek.com"  # 优先读环境变量
+  api_base: "https://api.deepseek.com"  # 优先读环境变量 LLM_API_KEY
   api_key: "sk-your-api-key-here"
- 
+
   # 各阶段的模型指派
   models:
     extraction: "deepseek-v4-pro"       # DeepSeek-R1: 深度推理，提取观点

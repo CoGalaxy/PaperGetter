@@ -6,6 +6,9 @@ __pycache__/
 # 测试 & 工具缓存
 .pytest_cache/
 
+# 临时文件
+plan
+
 # Claude Code 本地配置
 .claude/
 
@@ -20,3 +23,6 @@ papers/
 .idea/
 docs/
 CLAUDE.md
+
+# config
+config.yaml
