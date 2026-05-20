@@ -24,50 +24,59 @@ AI 驱动的论文审查工具：输入一篇 PDF，自动完成**方法论提�
 ### 1. 安装
 
 ```bash
+git clone <repo-url> && cd paper_get_agent
 pip install -e .
 ```
 
-### 2. 配置
+### 2. 配置 API Key
 
-编辑 `config.yaml`，至少填写 API key：
+**方式一：config.yaml 文件（CLI 和 Web 通用）**
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+编辑 `config.yaml`，填入你的 API key：
 
 ```yaml
 llm:
   api_base: "https://api.deepseek.com"
-  api_key: "sk-your-key-here"
-  models:
-    extraction: "deepseek-v4-pro"
-    code_generation: "deepseek-v4-flash"
-    parsing: "deepseek-v4-flash"
-    comparison: "deepseek-v4-flash"
-    limitation: "deepseek-v4-pro"
-    summarization: "deepseek-v4-pro"
+  api_key: "sk-your-key-here"   # ← 改成你自己的 key
 ```
 
-也支持环境变量 `LLM_API_KEY`。
+也支持环境变量：`export LLM_API_KEY=sk-xxx`（优先级高于 config.yaml）。
 
-### 3. CLI 运行
+**方式二：Web 设置页（仅 Web 用户）**
+
+启动 Web 后，打开 http://localhost:8000 ，点击顶部导航栏的 **「设置」**，在可视化表单中填写 API Key 并保存。设置页上的修改会直接写入 `config.yaml`。
+
+> 两种方式等价，本质都是读写 `config.yaml`。CLI 用户必须用方式一，Web 用户任选其一。
+
+### 3. 使用
+
+**CLI 模式：**
 
 ```bash
-python main.py paper.pdf                 # 全流程
-python main.py paper.pdf --skip-validate  # 跳过验证（推荐日常使用）
-python main.py paper.pdf -o reports/      # 指定输出目录
+python main.py paper.pdf                  # 全流程分析
+python main.py paper.pdf --skip-validate   # 跳过代码验证（日常推荐）
+python main.py paper.pdf -o reports/       # 指定输出目录
 ```
 
 输出：
 - `output/<标题>_<日期>.md` — Markdown 报告
 - `output/<标题>_<日期>.json` — 结构化数据
 
-### 4. Web 界面
+**Web 界面：**
 
 ```bash
 python -m web.server
 # 打开 http://localhost:8000
 ```
 
-- **主页** — 拖拽上传 PDF，实时进度（含 LLM 流式输出），历史任务
-- **报告页** — 结构化渲染：方法论卡片、因果链手风琴、验证对照、局限性着色、LaTeX 公式、总结
-- **设置页** — 可视化编辑 `config.yaml`（6 个 Agent 模型指派、温度、沙箱参数等）
+页面功能：
+- **主页** — 拖拽上传 PDF，实时进度条 + LLM 流式输出，历史任务管理
+- **报告页** — 结构化渲染：方法论卡片、因果链手风琴、验证对照、局限性着色、LaTeX 公式
+- **设置页** — 可视化编辑 API Key、6 个 Agent 模型指派、温度、沙箱参数等
 - 一键下载 Markdown / 打印彩色 PDF
 
 ## 流水线架构
@@ -159,7 +168,7 @@ AnalysisReport
 
 ```
 paper_get_agent/
-├── config.yaml                       # 模型指派 & 沙箱 & parser 配置
+├── config.example.yaml               # 配置模板（复制为 config.yaml 后填入 key）
 ├── main.py                           # CLI 入口 (Click + Rich 实时面板)
 ├── src/paper_get_agent/
 │   ├── models/paper.py               # Pydantic 数据模型 + 中文标签映射
